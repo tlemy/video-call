@@ -1,27 +1,36 @@
 package com.lemyted;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketAddress;
+import java.net.StandardSocketOptions;
+import java.nio.channels.ServerSocketChannel;
 import java.util.LinkedList;
 import java.util.List;
 
-import javax.net.ServerSocketFactory;
-
-public class Server {
+public class Server
+{
 	static final int PORT = 8800;
 	
 	static final int BACKLOG = 5;
 	
+	private ServerSocketChannel channel;
+	
 	private ServerSocket servSock;
 	
-	private List<Socket> connections;
+	private List<ClientConnection> connections;
 		
-	public Server() {
-		try {
-			setServSock(ServerSocketFactory.getDefault().createServerSocket(PORT));
+	public Server()
+	{
+		try
+		{
+			channel = ServerSocketChannel.open();
+			channel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
+			channel.bind(new InetSocketAddress(PORT), BACKLOG);
 			
+			setServSock(channel.socket());
+
 			if (!servSock.isBound())
 			{
 				throw new IOException("Socket not bound");
@@ -29,22 +38,29 @@ public class Server {
 			
 			System.out.println("Port: " + servSock.getLocalPort());
 		} 
-		catch (IOException e) {
+		catch (IOException e)
+		{
 			// TODO Add logs
 			e.printStackTrace();
 			closeServerSocket();
 		}
-		connections = new LinkedList<Socket>();
+		connections = new LinkedList<ClientConnection>();
 	}
 	
-	public void run() {
-		try {			
+	public void run()
+	{
+		try
+		{			
 			while (true)
 			{
-				connections.add(servSock.accept());
-				System.out.println("added new connection");
+				ClientConnection conn = new ClientConnection(servSock.accept());
+				
+				connections.add(conn);
+				
+				conn.run();
 			}
-		} catch (IOException e) {
+		}
+		catch (IOException e) {
 			// TODO Add logs
 			e.printStackTrace();
 		}
@@ -56,9 +72,12 @@ public class Server {
 	{
 		if (servSock != null && !servSock.isClosed())
 		{
-			try {
+			try
+			{
 				servSock.close();
-			} catch (IOException e) {
+			} 
+			catch (IOException e)
+			{
 				// TODO Add logs
 				e.printStackTrace();
 			}
@@ -67,25 +86,22 @@ public class Server {
 	
 	private void closeConnections()
 	{
-		for (Socket sock : connections)
+		for (ClientConnection conn : connections)
 		{
-			if (!sock.isClosed())
+			if (conn.isOpen())
 			{
-				try {
-					sock.close();
-				} catch (IOException e) {
-					// TODO Add logs
-					e.printStackTrace();
-				}
+				conn.setRunning(false);
 			}
 		}
 	}
 
-	public ServerSocket getServSock() {
+	public ServerSocket getServSock()
+	{
 		return servSock;
 	}
 
-	private void setServSock(ServerSocket servSock) {
+	private void setServSock(ServerSocket servSock)
+	{
 		this.servSock = servSock;
 	}
 }
